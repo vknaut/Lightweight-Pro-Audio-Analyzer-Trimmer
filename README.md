@@ -1,4 +1,4 @@
-# Lightweight-Pro-Audio-Analyzer-Trimmer
+# Lightweight-Pro-Audio-(BPM / Key) Analyzer-Trimmer
 ![Pro Audio Analyzer & Trimmer UI](image.png)
 A powerful, browser-based digital signal processing (DSP) tool for fast audio analysis (BPM + Key/Scale). Including audio trimming and normalization feature. Designed for audio professionals, producers, and developers looking for a lightweight, client-side tool to quickly trim and analyze an audio file.
 
