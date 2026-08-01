@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Audio Analyzer & Trimmer</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg: #111827;
+            --panel: #1f2937;
+            --text: #f3f4f6;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+        #drop-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(79, 70, 229, 0.9);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: bold;
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        #drop-overlay.active { opacity: 1; }
+        .panel {
+            background-color: var(--panel);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        button:hover:not(:disabled) { background-color: var(--primary-hover); }
+        button:disabled { background-color: #4b5563; cursor: not-allowed; opacity: 0.7; }
+        
+        #waveform {
+            background: #000;
+            border-radius: 4px;
+            margin: 1rem 0;
+            overflow: hidden;
+        }
+        
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+            background: rgba(0,0,0,0.2);
+            padding: 1rem;
+            border-radius: 6px;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .input-group label { font-size: 0.875rem; color: #9ca3af; }
+        .input-group input[type="number"] {
+            background: #374151;
+            border: 1px solid #4b5563;
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        
+        .export-section {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #374151;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .checkbox-group label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        .stat-box {
+            background: rgba(0,0,0,0.2);
+            padding: 1.5rem;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 2.2rem;
+            font-weight: bold;
+            color: var(--primary);
+            display: block;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="drop-overlay">Drop Audio File Here</div>
+
+    <h2>Pro Audio Analyzer & Trimmer</h2>
+
+    <div class="panel">
+        <div class="header">
+            <div>
+                <input type="file" id="file-input" accept="audio/*" style="display: none;">
+                <button onclick="document.getElementById('file-input').click()">Browse File</button>
+                <span id="file-name" style="margin-left: 10px; color: #9ca3af;">No file loaded (or drag & drop)</span>
+            </div>
+            <div>
+	    	<button id="btn-play" disabled>Play</button>
+    		<button id="btn-pause" disabled>Pause</button>
+		<button id="btn-stop" disabled>Stop</button>
+	    </div>
+        </div>
+
+        <div id="waveform"></div>
+
+        <div class="controls-grid">
+            <div class="input-group">
+                <label>Start Time (s)</label>
+                <input type="number" id="input-start" step="0.01" min="0" disabled>
+            </div>
+            <div class="input-group">
+                <label>End Time (s)</label>
+                <input type="number" id="input-end" step="0.01" min="0" disabled>
+            </div>
+            <div class="input-group">
+                <label>Length (s)</label>
+                <input type="number" id="input-length" step="0.01" min="0" disabled>
+            </div>
+            <div class="input-group" style="justify-content: flex-end;">
+                <button id="btn-select-all" disabled>Select All</button>
+            </div>
+        </div>
+
+        <div class="export-section">
+            <button id="btn-analyze" disabled>Analyze Selection</button>
+            <button id="btn-download" disabled>Download Trimmed</button>
+            
+            <div class="checkbox-group">
+                <label>
+                    <input type="checkbox" id="chk-normalize" checked>
+                    Normalize Volume (Prevents clipping/boosts quiet audio)
+                </label>
+                <label>
+                    <input type="checkbox" id="chk-16k">
+                    Convert to 16kHz Mono WAV (16-bit)
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="stats-grid panel">
+        <div class="stat-box">
+            Estimated BPM
+            <span class="stat-value" id="bpm-out">--</span>
+        </div>
+        <div class="stat-box">
+            Exact Key & Scale
+            <span class="stat-value" id="key-out">--</span>
+        </div>
+    </div>
+
+    <script type="module">
+        import WaveSurfer from 'https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.esm.js';
+        import RegionsPlugin from 'https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.esm.js';
+
+        // Globals
+        let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let originalBuffer = null;
+        let originalFileName = "";
+        let activeRegion = null;
+        let isUpdatingInputs = false;
+
+        // UI Elements
+        const overlay = document.getElementById('drop-overlay');
+        const fileInput = document.getElementById('file-input');
+        const fileNameDisplay = document.getElementById('file-name');
+        
+        const btnPlay = document.getElementById('btn-play');
+	const btnStop = document.getElementById('btn-stop');
+	const btnPause = document.getElementById('btn-pause');
+        const btnSelectAll = document.getElementById('btn-select-all');
+        const btnAnalyze = document.getElementById('btn-analyze');
+        const btnDownload = document.getElementById('btn-download');
+        
+        const inStart = document.getElementById('input-start');
+        const inEnd = document.getElementById('input-end');
+        const inLength = document.getElementById('input-length');
+        
+        const chkNormalize = document.getElementById('chk-normalize');
+        const chk16k = document.getElementById('chk-16k');
+
+        const outBpm = document.getElementById('bpm-out');
+        const outKey = document.getElementById('key-out');
+
+        // Wavesurfer setup
+        const wavesurfer = WaveSurfer.create({
+            container: '#waveform',
+            waveColor: '#4f46e5',
+            progressColor: '#3730a3',
+            cursorColor: '#ffffff',
+            barWidth: 2,
+            height: 128
+        });
+        const wsRegions = wavesurfer.registerPlugin(RegionsPlugin.create());
+        wsRegions.enableDragSelection({ color: 'rgba(79, 70, 229, 0.4)' });
+
+        wsRegions.on('region-created', (region) => {
+            if (activeRegion && activeRegion !== region) activeRegion.remove();
+            activeRegion = region;
+            updateInputsFromRegion();
+        });
+        wsRegions.on('region-updated', updateInputsFromRegion);
+
+        // Drag & Drop
+        window.addEventListener('dragover', (e) => { e.preventDefault(); overlay.classList.add('active'); });
+        window.addEventListener('dragleave', (e) => { e.preventDefault(); overlay.classList.remove('active'); });
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            overlay.classList.remove('active');
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) handleFile(e.target.files[0]);
+        });
+
+        async function handleFile(file) {
+            originalFileName = file.name;
+            fileNameDisplay.textContent = originalFileName;
+            
+            const arrayBuffer = await file.arrayBuffer();
+            originalBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+            
+            const blob = new Blob([arrayBuffer]);
+            wavesurfer.load(URL.createObjectURL(blob));
+        }
+
+        wavesurfer.on('ready', () => {
+            [btnPlay, btnPause, btnStop, btnSelectAll, btnAnalyze, btnDownload, inStart, inEnd, inLength].forEach(el => el.disabled = false);
+            selectAll();
+        });
+
+        btnPlay.addEventListener('click', () => {
+            if (activeRegion) {
+        	const currentTime = wavesurfer.getCurrentTime();
+        	// If the playhead is already inside the region, just resume.
+        	// Otherwise, start from the beginning of the region.
+        	if (currentTime >= activeRegion.start && currentTime < activeRegion.end) {
+            		wavesurfer.play();
+        	} else {
+            		activeRegion.play();
+       		}
+    	} else {
+        	wavesurfer.play();
+	}
+        });
+
+	btnPause.addEventListener('click', () => {
+   	    wavesurfer.pause();
+	});
+	btnStop.addEventListener('click', () => {
+    		wavesurfer.stop();
+	});
+
+        // Linked Inputs Math
+        function updateInputsFromRegion() {
+            if (!activeRegion || isUpdatingInputs) return;
+            isUpdatingInputs = true;
+            inStart.value = activeRegion.start.toFixed(2);
+            inEnd.value = activeRegion.end.toFixed(2);
+            inLength.value = (activeRegion.end - activeRegion.start).toFixed(2);
+            isUpdatingInputs = false;
+        }
+
+        function updateRegionFromInputs() {
+            if (!activeRegion || isUpdatingInputs) return;
+            isUpdatingInputs = true;
+            let s = parseFloat(inStart.value) || 0;
+            let e = parseFloat(inEnd.value) || 0;
+            if (s < 0) s = 0;
+            if (e > originalBuffer.duration) e = originalBuffer.duration;
+            activeRegion.setOptions({ start: s, end: e });
+            isUpdatingInputs = false;
+        }
+
+        inStart.addEventListener('input', () => {
+            if(isUpdatingInputs) return;
+            inEnd.value = (parseFloat(inStart.value || 0) + parseFloat(inLength.value || 0)).toFixed(2);
+            updateRegionFromInputs();
+        });
+        inLength.addEventListener('input', () => {
+            if(isUpdatingInputs) return;
+            inEnd.value = (parseFloat(inStart.value || 0) + parseFloat(inLength.value || 0)).toFixed(2);
+            updateRegionFromInputs();
+        });
+        inEnd.addEventListener('input', () => {
+            if(isUpdatingInputs) return;
+            let s = parseFloat(inStart.value || 0);
+            let e = parseFloat(inEnd.value || 0);
+            if(e < s) e = s;
+            inLength.value = (e - s).toFixed(2);
+            updateRegionFromInputs();
+        });
+
+        function selectAll() {
+            if (activeRegion) activeRegion.remove();
+            activeRegion = wsRegions.addRegion({
+                start: 0,
+                end: originalBuffer.duration,
+                color: 'rgba(79, 70, 229, 0.4)'
+            });
+            updateInputsFromRegion();
+        }
+        btnSelectAll.addEventListener('click', selectAll);
+
+        /* --- DSP: Audio Slicing & Processing --- */
+        async function getTrimmedBuffer() {
+            const start = activeRegion ? activeRegion.start : 0;
+            const end = activeRegion ? activeRegion.end : originalBuffer.duration;
+            const startFrame = Math.floor(start * originalBuffer.sampleRate);
+            const endFrame = Math.floor(end * originalBuffer.sampleRate);
+            const frameCount = endFrame - startFrame;
+
+            const trimmed = audioCtx.createBuffer(originalBuffer.numberOfChannels, frameCount, originalBuffer.sampleRate);
+            for (let i = 0; i < originalBuffer.numberOfChannels; i++) {
+                trimmed.getChannelData(i).set(originalBuffer.getChannelData(i).subarray(startFrame, endFrame));
+            }
+            return trimmed;
+        }
+
+        function applyNormalization(buffer) {
+            let maxVol = 0;
+            for(let c=0; c<buffer.numberOfChannels; c++) {
+                let data = buffer.getChannelData(c);
+                for(let i=0; i<data.length; i++) {
+                    if (Math.abs(data[i]) > maxVol) maxVol = Math.abs(data[i]);
+                }
+            }
+            if (maxVol > 0) {
+                const multiplier = 0.98 / maxVol; // Normalize to near 0 dBFS
+                for(let c=0; c<buffer.numberOfChannels; c++) {
+                    let data = buffer.getChannelData(c);
+                    for(let i=0; i<data.length; i++) {
+                        data[i] *= multiplier;
+                    }
+                }
+            }
+            return buffer;
+        }
+
+        async function processExport(buffer, force16kMono, normalize) {
+            let procBuffer = buffer;
+            if (normalize) {
+                // Copy buffer so we don't accidentally mutate playback visuals
+                procBuffer = audioCtx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+                for(let i=0; i<buffer.numberOfChannels; i++) procBuffer.getChannelData(i).set(buffer.getChannelData(i));
+                procBuffer = applyNormalization(procBuffer);
+            }
+
+            if (!force16kMono) return procBuffer;
+
+            const targetRate = 16000;
+            const offlineCtx = new OfflineAudioContext(1, procBuffer.duration * targetRate, targetRate);
+            const source = offlineCtx.createBufferSource();
+            source.buffer = procBuffer;
+            source.connect(offlineCtx.destination);
+            source.start();
+            return await offlineCtx.startRendering();
+        }
+
+        /* --- Download Action --- */
+        btnDownload.addEventListener('click', async () => {
+            btnDownload.textContent = "Processing...";
+            btnDownload.disabled = true;
+
+            const trimmed = await getTrimmedBuffer();
+            const finalBuffer = await processExport(trimmed, chk16k.checked, chkNormalize.checked);
+            const wavBlob = audioBufferToWavBlob(finalBuffer, chk16k.checked);
+            
+            let baseName = originalFileName.split('.').slice(0, -1).join('.');
+            if (baseName.length > 20) baseName = baseName.substring(0, 20);
+            
+            const url = URL.createObjectURL(wavBlob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `${baseName}_trimmed.wav`;
+            document.body.appendChild(a);
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            btnDownload.textContent = "Download Trimmed";
+            btnDownload.disabled = false;
+        });
+
+        /* --- Analysis Action --- */
+        btnAnalyze.addEventListener('click', async () => {
+            outBpm.textContent = "Analyzing...";
+            outKey.textContent = "Analyzing...";
+            btnAnalyze.disabled = true;
+            
+            setTimeout(async () => {
+                const trimmed = await getTrimmedBuffer();
+                
+                // Downmix to Mono for DSP analysis
+                const offlineCtx = new OfflineAudioContext(1, trimmed.length, trimmed.sampleRate);
+                const source = offlineCtx.createBufferSource();
+                source.buffer = trimmed;
+                source.connect(offlineCtx.destination);
+                source.start();
+                const monoBuffer = await offlineCtx.startRendering();
+                
+                outBpm.textContent = await detectBPM(monoBuffer) || "N/A";
+                outKey.textContent = await detectKey(monoBuffer) || "N/A";
+                btnAnalyze.disabled = false;
+            }, 50);
+        });
+
+        /* --- Advanced DSP Algorithms --- */
+
+        // 1. BPM Detection using Lowpass Filtered Energy Histograms
+        async function detectBPM(monoBuffer) {
+            // Run mono through a 150Hz low-pass filter to isolate kicks/bass
+            const offlineCtx = new OfflineAudioContext(1, monoBuffer.length, monoBuffer.sampleRate);
+            const source = offlineCtx.createBufferSource();
+            source.buffer = monoBuffer;
+            
+            const filter = offlineCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 150;
+            
+            source.connect(filter);
+            filter.connect(offlineCtx.destination);
+            source.start();
+            
+            const filteredBuffer = await offlineCtx.startRendering();
+            const data = filteredBuffer.getChannelData(0);
+            const sr = filteredBuffer.sampleRate;
+            
+            let peaks = [];
+            let maxEnergy = 0;
+            for(let i=0; i<data.length; i++) if(Math.abs(data[i]) > maxEnergy) maxEnergy = Math.abs(data[i]);
+            
+            const threshold = maxEnergy * 0.7; // 70% threshold
+            for(let i=0; i<data.length; i++) {
+                if(data[i] > threshold) {
+                    peaks.push(i);
+                    i += Math.floor(sr * 0.2); // Skip 200ms to avoid double triggering the same beat
+                }
+            }
+            
+            let intervals = {};
+            for(let i=1; i<peaks.length; i++) {
+                let bpm = (60 * sr) / (peaks[i] - peaks[i-1]);
+                while(bpm < 75) bpm *= 2;
+                while(bpm > 160) bpm /= 2;
+                let b = Math.round(bpm);
+                if(b >= 75 && b <= 160) intervals[b] = (intervals[b] || 0) + 1;
+            }
+
+            let bestBPM = 0, maxCount = 0;
+            for(const [bpm, count] of Object.entries(intervals)) {
+                if(count > maxCount) { maxCount = count; bestBPM = bpm; }
+            }
+            return bestBPM ? `${bestBPM} BPM` : null;
+        }
+
+        // 2. Exact Scale & Key using Chromagram & Krumhansl-Schmuckler profiles
+        async function detectKey(monoBuffer) {
+            const ctx = new OfflineAudioContext(1, monoBuffer.length, monoBuffer.sampleRate);
+            const source = ctx.createBufferSource();
+            source.buffer = monoBuffer;
+
+            // Use AnalyserNode to calculate FFTs
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 8192; 
+            analyser.smoothingTimeConstant = 0.2;
+
+            // Use a ScriptProcessor to iteratively collect FFT frames over the duration
+            const processor = ctx.createScriptProcessor(4096, 1, 1);
+            
+            source.connect(analyser);
+            analyser.connect(processor);
+            processor.connect(ctx.destination);
+
+            let chroma = new Float32Array(12);
+
+            processor.onaudioprocess = () => {
+                const bins = new Uint8Array(analyser.frequencyBinCount);
+                analyser.getByteFrequencyData(bins);
+                
+                // Map FFT bins to 12 Musical Pitch Classes
+                for (let i = 20; i < bins.length; i++) { 
+                    const val = bins[i];
+                    if (val > 0) {
+                        const freq = i * ctx.sampleRate / analyser.fftSize;
+                        if (freq > 40 && freq < 5000) { // Limit to standard musical range
+                            const noteNum = 12 * Math.log2(freq / 440) + 69;
+                            const pitchClass = Math.round(noteNum) % 12;
+                            if (pitchClass >= 0 && pitchClass < 12) {
+                                chroma[pitchClass] += val;
+                            }
+                        }
+                    }
+                }
+            };
+
+            source.start(0);
+            await ctx.startRendering();
+            
+            // Normalize Chromagram
+            const maxVal = Math.max(...chroma) || 1;
+            for(let i=0; i<12; i++) chroma[i] /= maxVal;
+
+            // Krumhansl-Schmuckler profiles
+            const notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+            const majorProfile = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
+            const minorProfile = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+
+            function getPearson(x, y) {
+                const n = x.length;
+                const meanX = x.reduce((a,b)=>a+b)/n;
+                const meanY = y.reduce((a,b)=>a+b)/n;
+                let num = 0, denX = 0, denY = 0;
+                for (let i = 0; i < n; i++) {
+                    num += (x[i] - meanX) * (y[i] - meanY);
+                    denX += Math.pow(x[i] - meanX, 2);
+                    denY += Math.pow(y[i] - meanY, 2);
+                }
+                return (denX === 0 || denY === 0) ? 0 : num / Math.sqrt(denX * denY);
+            }
+
+            let bestKey = "Unknown";
+            let maxCorr = -Infinity;
+
+            // Compare generated chroma against all 12 major and 12 minor scales
+            for (let rootIndex = 0; rootIndex < 12; rootIndex++) {
+                let currentMajor = [];
+                let currentMinor = [];
+                
+                for (let j = 0; j < 12; j++) {
+                    let shiftedIndex = (j - rootIndex + 12) % 12;
+                    currentMajor.push(majorProfile[shiftedIndex]);
+                    currentMinor.push(minorProfile[shiftedIndex]);
+                }
+
+                let corrMajor = getPearson(chroma, currentMajor);
+                if (corrMajor > maxCorr) {
+                    maxCorr = corrMajor;
+                    bestKey = `${notes[rootIndex]} Major`;
+                }
+
+                let corrMinor = getPearson(chroma, currentMinor);
+                if (corrMinor > maxCorr) {
+                    maxCorr = corrMinor;
+                    bestKey = `${notes[rootIndex]} Minor`;
+                }
+            }
+
+            return bestKey;
+        }
+
+        /* --- AudioBuffer to WAV File Writer --- */
+        function audioBufferToWavBlob(buffer, force16Bit) {
+            const numChannels = buffer.numberOfChannels;
+            const sampleRate = buffer.sampleRate;
+            const format = force16Bit ? 1 : 3; 
+            const bitDepth = force16Bit ? 16 : 32;
+            const bytesPerSample = bitDepth / 8;
+            const blockAlign = numChannels * bytesPerSample;
+            const byteRate = sampleRate * blockAlign;
+            const dataSize = buffer.length * blockAlign;
+            
+            const bufferArray = new ArrayBuffer(44 + dataSize);
+            const view = new DataView(bufferArray);
+            
+            const writeString = (v, offset, string) => { for (let i = 0; i < string.length; i++) v.setUint8(offset + i, string.charCodeAt(i)); };
+            
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + dataSize, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, format, true); 
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, bitDepth, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataSize, true);
+            
+            let offset = 44;
+            if (force16Bit) {
+                for (let i = 0; i < buffer.length; i++) {
+                    for (let c = 0; c < numChannels; c++) {
+                        let sample = Math.max(-1, Math.min(1, buffer.getChannelData(c)[i]));
+                        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+                        offset += 2;
+                    }
+                }
+            } else {
+                for (let i = 0; i < buffer.length; i++) {
+                    for (let c = 0; c < numChannels; c++) {
+                        view.setFloat32(offset, buffer.getChannelData(c)[i], true);
+                        offset += 4;
+                    }
+                }
+            }
+            return new Blob([view], { type: 'audio/wav' });
+        }
+    </script>
+</body>
+</html>
